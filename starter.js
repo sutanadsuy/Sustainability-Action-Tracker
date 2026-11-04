@@ -151,6 +151,17 @@
     try { localStorage.setItem(KEY, JSON.stringify(db)); return true; }
     catch { notice('เครื่องนี้เก็บข้อมูลเพิ่มไม่ได้ กรุณาตรวจพื้นที่ว่างของเบราว์เซอร์'); return false; }
   }
+
+  async function appsScript(action, payload = {}) {
+    const response = await fetch(APPS_SCRIPT_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action, payload })
+    });
+    const result = await response.json();
+    if (!result.ok) throw new Error(result.error || 'Apps Script ไม่สามารถบันทึกข้อมูลได้');
+    return result.data;
+  }
   function notice(message, kind = 'info') {
     const box = $('#toast');
     box.textContent = message;
@@ -644,7 +655,7 @@
         <button class="work-action-card" data-follow-page="archive" data-project-id="${activeProject.id}"><span class="work-action-number">04</span><strong>แก้ข้อมูลย้อนหลัง</strong><small>${activeHistory.length?`มีรายงานเดิม ${activeHistory.length} เดือน · เปิดกลับมาแก้ได้`:'รายงานที่บันทึกจะแสดงให้เปิดดูและแก้ไขที่นี่'}</small><b>เลือกรอบรายงาน →</b></button></div></section>
       <section class="report-cycle-banner ${activeReport?'is-submitted':activeReportDraft?'is-draft':''}"><div><strong>รายงานประจำเดือน ${monthLabel(period)} · กำหนดส่งวันที่ 26</strong><span>${activeReportDraft?`มีร่างที่บันทึกไว้ ${esc(activeReportDraft.savedAt)} · ${activeReport?'ฉบับแก้ไขยังไม่ส่ง':'ร่างยังไม่นับว่าส่งรายงาน'}`:activeReport?`ส่งรายงานแล้ว · ฉบับ ${activeReport.version} · ${esc(activeReport.updatedAt)}`:'ยังไม่ได้บันทึกหรือส่งรายงานเดือนนี้'}</span></div><button class="mini-btn" data-follow-page="report" data-project-id="${activeProject.id}" data-follow-month="${period}">${activeReportDraft?'กลับไปทำร่างต่อ':activeReport?'เปิดรายงาน':'เริ่มรายงาน'}</button></section>
       <section class="user-work-summary card"><div><small>ภาพรวมรอบเดือน ${monthLabel(period)}</small><h2>${doneCount}/${projectCount} โครงการรายงานแล้ว</h2><p>${missingPlanCount} โครงการยังไม่มีแผน · ${behindCount} โครงการต่ำกว่าแผน</p></div><button class="mini-btn" data-go="archive">ดูรายงานย้อนหลังทั้งหมด</button></section>
-      <div class="soft-note">ข้อมูลและไฟล์แนบในระบบเก็บในเบราว์เซอร์เครื่องนี้เท่านั้น</div>`;
+      <div class="soft-note">ข้อมูลหลักบันทึกใน Google Sheets และไฟล์แนบจัดเก็บใน Google Drive</div>`;
   }
 
   function renderAdmin() {
@@ -1785,6 +1796,8 @@
       const nextTotal=yearProjects().reduce((sum,project)=>sum+(project.id===item?.id?0:safeNum(project.budget)),0)+(fields.get('active')==='true'?budget:0);
       if(nextTotal>db.budgets[ui.year].amount)return notice(`วงเงินรวมเกินงบปี ${money(nextTotal-db.budgets[ui.year].amount)} บาท กรุณาตรวจงบก่อน`);
       const record={year:ui.year,name,deptId,budget,owners,active:fields.get('active')==='true'};
+      const remote = await appsScript('createProject', { fiscal_year: ui.year, project_name: name, department: db.departments.find(d => d.id === deptId)?.name || deptId, budget_allocated: budget, responsible_person: owners[0]?.name || '', primary_email: owners[0]?.email || '' });
+      if (remote?.project_id) record.remoteId = remote.project_id;
       if(item)Object.assign(item,record);else db.projects.push({id:uid(),...record});
       log('โครงการ',item?'แก้ไข':'เพิ่ม',`${name} · ${money(budget)} บาท`,before,record);ui.editProject='';persist();setAdminPanelOpen('admin-projects',true);render();return notice(item?'บันทึกการแก้ไขโครงการเรียบร้อยแล้ว':'เพิ่มโครงการเรียบร้อยแล้ว', 'confirmation');
     }
@@ -1811,6 +1824,7 @@
     if(form.id==='plan-form') {
       const plan=collectPlan(),error=validatePlan(plan,true);
       if(error)return notice(error);
+      await appsScript('savePlan', { project_id: selectedProject().remoteId || ui.projectId, baseline_start: plan.baselineStart, baseline_end: plan.baselineEnd, objective: plan.objective, indicator: plan.indicator, target: plan.target, sdg_ids: plan.sdgs || [], procurement_plan: plan.procurementItems || [] });
       plan.savedAt=now();plan.status='confirmed';db.plans[ui.projectId]=plan;delete db.planDrafts[ui.projectId];ui.planDraft=null;log('แผนโครงการ','ยืนยันแผน',selectedProject().name);persist();render();return notice('ยืนยันแผนแล้ว ไปกรอกรายงานผลได้');
     }
     if(form.id==='report-form') {
@@ -1835,6 +1849,8 @@
         for(const entry of uploaded){const file=entry.file,blobId=await putFile(file);attachments.push({id:uid(),blobId,name:file.name,isImage:file.type.startsWith('image/'),caption:file.name.replace(/\.[^.]+$/,''),featured:entry.evidenceType==='general'&&file.type.startsWith('image/')&&attachments.filter(item=>item.isImage&&item.featured).length<3,expenseIndex:entry.expenseIndex,evidenceType:entry.evidenceType,uploadedAt:now()});}
       }catch{return notice('เก็บไฟล์แนบในเบราว์เซอร์นี้ไม่ได้');}
       const record={projectId:project.id,month:ui.month,phases,expenseItemPayments:expenses.amounts,expenseItemReceived:expenses.received,expenseItemTreasuryCleared:expenses.treasuryCleared,procurementItemPayments:expenses.amounts,procurementPaid:expenses.totals.procurement,loanPaid:expenses.totals.advance,otherPaid:expenses.totals.other,unplannedPaid:expenses.unplannedPaid,summaryText,delay,forecastMonth,sdgOutcome:String(fields.get('sdgOutcome')||'').trim(),indicatorActual:String(fields.get('indicatorActual')||'').trim(),attachments,updatedAt:now(),submittedAt:now(),status:'submitted',version:(existing?.version||0)+1};
+      const remoteReport = await appsScript('saveReport', { report_id: existing?.remoteId || existing?.id, project_id: project.remoteId || project.id, month: ui.month, version: record.version, summary: summaryText, progress_actual: progress(phases), indicator_actual: record.indicatorActual, delay: record.delay, sdg_outcome: record.sdgOutcome });
+      if (remoteReport?.report_id) record.remoteId = remoteReport.report_id;
       if(existing)Object.assign(existing,record);else db.reports.push({id:uid(),...record});
       db.reportDrafts=db.reportDrafts.filter(item=>!(item.projectId===project.id&&item.month===ui.month));ui.reportId=existing?.id||db.reports.at(-1).id;db.lastMonth=ui.month;log('รายงาน','ส่งรายงาน',`${project.name} · ${monthLabel(ui.month)} · ฉบับ ${record.version}`);persist();navigate('project-output');return notice('ส่งรายงานแล้ว เลือกภาพเด่นก่อนพิมพ์ได้');
     }
@@ -1859,9 +1875,13 @@
       const budgets = Object.fromEntries(budgetRows.map(row => [Number(row.Fiscal_Year), { amount: safeNum(row.Total_Budget_THB), updatedAt: row.Updated_At || '' }]));
       db = { ...db, departments, projects, plans, reports, budgets };
       persist();
+      const connection = document.getElementById('connection-status');
+      if (connection) connection.innerHTML = '<span class="pulse-dot"></span> เชื่อมต่อ Google Sheets แล้ว';
       render();
       notice('โหลดข้อมูลจาก Google Sheets แล้ว', 'confirmation');
     } catch (error) {
+      const connection = document.getElementById('connection-status');
+      if (connection) connection.innerHTML = '<span class="pulse-dot" style="background:#d64545"></span> เชื่อมต่อ Google Sheets ไม่สำเร็จ';
       console.warn('Apps Script API unavailable', error);
     }
   }
