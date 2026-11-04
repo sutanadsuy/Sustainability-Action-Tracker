@@ -4,6 +4,7 @@
   // Production data is loaded from the connected source.  Keep a new storage
   // namespace so data left by the mock-up can never reappear on this page.
   const KEY = 'mu-scurve-production-workspace-v2';
+  const APPS_SCRIPT_URL = 'https://script.google.com/a/macros/mahidol.ac.th/s/AKfycbzZ7cn4rgnzvFceOwnRWWe-EMhz8bV2UoLassgFKR5G19qVwXNDEkY9u3b9ULDZuS7QxQ/exec';
   const FILE_DB = 'mu-scurve-empty-files-v1';
   const ADMIN_PANELS_KEY = 'mu-scurve-admin-panels-v1';
   const INITIAL_ADMIN_EMAIL = 'sutanad.suy@mahidol.ac.th';
