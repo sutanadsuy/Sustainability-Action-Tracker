@@ -4,10 +4,12 @@ function doPost(e) {
     const action = String(request.action || '');
     const p = request.payload || {};
     let data;
-    if (['createProject','savePlan','saveReport','uploadFile','uploadMetadata'].includes(action)) requireAdmin_();
+    if (['saveBudget','saveDepartment','createProject','savePlan','saveReport','uploadFile','uploadMetadata'].includes(action)) requireAdmin_();
     switch (action) {
       case 'health': data = {service:'ok',user:user_()}; break;
       case 'bootstrap': data = bootstrap_(p.fiscalYear); break;
+      case 'saveBudget': data = saveBudget_(p); break;
+      case 'saveDepartment': data = saveDepartment_(p); break;
       case 'createProject': data = createProject_(p); break;
       case 'savePlan': data = savePlan_(p); break;
       case 'saveReport': data = saveReport_(p); break;

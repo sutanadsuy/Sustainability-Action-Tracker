@@ -9,6 +9,8 @@ function bootstrap_(fiscalYear) {
   const year = Number(fiscalYear || new Date().getFullYear() + 543);
   return {fiscalYear:year, budgets:rows_('Master_Budgets').filter(r=>Number(r.Fiscal_Year)===year), departments:rows_('Master_Departments'), projects:rows_('Master_Projects').filter(r=>Number(r.Fiscal_Year)===year), plans:rows_('Plans'), reports:rows_('Reports'), expenses:rows_('Expenses'), attachments:rows_('Attachments')};
 }
+function saveBudget_(p) { append_('Master_Budgets',{Fiscal_Year:p.fiscal_year,Total_Budget_THB:p.total_budget_thb,Updated_At:new Date(),Status:'active'}); return {fiscal_year:p.fiscal_year}; }
+function saveDepartment_(p) { const id=p.department_id||Utilities.getUuid(); append_('Master_Departments',{Dept_ID:id,Department_Name:p.department_name,Head_Name:p.head_name,Head_Email:p.head_email,Start_Date:p.start_date||''}); return {department_id:id}; }
 function append_(sheetName, object) {
   const sheet = getAppSpreadsheet_().getSheetByName(sheetName);
   if (!sheet) throw new Error('ไม่พบชีต ' + sheetName);

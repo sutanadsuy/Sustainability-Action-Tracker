@@ -1774,6 +1774,7 @@
     if (form.id==='budget-form') {
       const amount=parseAmount(fields.get('amount'));
       if (!Number.isFinite(amount)||amount<0) return notice('กรุณากรอกงบประมาณตั้งแต่ศูนย์ขึ้นไป');
+      await appsScript('saveBudget', { fiscal_year: ui.year, total_budget_thb: amount });
       const before=db.budgets[ui.year]?{...db.budgets[ui.year]}:null;db.budgets[ui.year]={amount,updatedAt:now()};log('งบประมาณ',before?'แก้ไข':'บันทึก',`ปี ${ui.year} · ${money(amount)} บาท`,before,db.budgets[ui.year]);persist();setAdminPanelOpen('admin-budget',true);render();return notice('บันทึกงบประมาณปีนี้แล้ว');
     }
     if (form.id==='department-form') {
@@ -1782,6 +1783,7 @@
       const duplicate=db.departments.find(item=>item.name.toLocaleLowerCase()===name.toLocaleLowerCase()&&item.id!==ui.editDept);
       if(duplicate)return notice('มีชื่อหน่วยงานนี้แล้ว');
       const item=db.departments.find(item=>item.id===ui.editDept),before=item?{...item}:null;
+      const remote=await appsScript('saveDepartment',{department_id:item?.remoteId||item?.id,department_name:name,head_name:head,head_email:email,start_date:String(fields.get('since')||'')});
       if(item)Object.assign(item,{name,head,email,since:String(fields.get('since')||'')});
       else db.departments.push({id:uid(),name,head,email,since:String(fields.get('since')||'')});
       const after=item?{...item}:db.departments.at(-1);log('หน่วยงาน',item?'แก้ไข':'เพิ่ม',`${name} · ${head}`,before,after);ui.editDept='';persist();setAdminPanelOpen('admin-departments',true);render();return notice('บันทึกหน่วยงานแล้ว');
