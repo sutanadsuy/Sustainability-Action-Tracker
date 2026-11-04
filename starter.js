@@ -1840,7 +1840,33 @@
     }
   });
 
+  async function hydrateFromAppsScript() {
+    try {
+      const response = await fetch(APPS_SCRIPT_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ action: 'bootstrap', payload: { fiscalYear: ui.year } })
+      });
+      const result = await response.json();
+      if (!result.ok || !result.data) throw new Error(result.error || 'โหลดข้อมูลไม่สำเร็จ');
+      const remote = result.data;
+      const departments = (remote.departments || []).map(row => ({ id: row.Dept_ID || row.department_id || uid(), name: row.Department_Name || row.department || '', head: row.Head_Name || '', email: row.Head_Email || '' }));
+      const projects = (remote.projects || []).map(row => ({ id: row.Project_ID || row.project_id, year: Number(row.Fiscal_Year || ui.year), name: row.Project_Name || row.project_name || '', deptId: row.Dept_ID || row.department_id || departments.find(d => d.name === row.Department)?.id || '', budget: safeNum(row.Budget_Allocated || row.budget || 0), owners: [{ name: row.Responsible_Person || row.owner || '', email: row.Primary_Email || '' }], active: String(row.Status || 'active').toLowerCase() !== 'archived', status: row.Status || 'active' }));
+      const plans = {};
+      (remote.plans || []).forEach(row => { plans[row.project_id] = { ...row, projectId: row.project_id, baselineStart: row.baseline_start, baselineEnd: row.baseline_end, objective: row.objective || '', indicator: row.indicator || '', target: row.target || '', sdgs: String(row.sdg_ids || '').split(',').map(v => v.trim()).filter(Boolean), procurementItems: [] }; });
+      const reports = (remote.reports || []).map(row => ({ ...row, id: row.report_id, projectId: row.project_id, month: row.month, version: Number(row.version || 1), summaryText: row.summary || '', indicatorActual: row.indicator_actual || '', delay: row.delay || '', sdgOutcome: row.sdg_outcome || '', updatedAt: row.updated_at || row.submitted_at || '' }));
+      const budgetRows = remote.budgets || [];
+      const budgets = Object.fromEntries(budgetRows.map(row => [Number(row.Fiscal_Year), { amount: safeNum(row.Total_Budget_THB), updatedAt: row.Updated_At || '' }]));
+      db = { ...db, departments, projects, plans, reports, budgets };
+      persist();
+      render();
+      notice('โหลดข้อมูลจาก Google Sheets แล้ว', 'confirmation');
+    } catch (error) {
+      console.warn('Apps Script API unavailable', error);
+    }
+  }
   render();
+  hydrateFromAppsScript();
 })();
 
 
