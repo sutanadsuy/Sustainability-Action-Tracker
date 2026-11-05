@@ -1887,7 +1887,19 @@
       const departments = (remote.departments || []).map(row => ({ id: row.Dept_ID || row.department_id || uid(), name: row.Department_Name || row.department || '', head: row.Head_Name || '', email: row.Head_Email || '' }));
       const projects = (remote.projects || []).map(row => ({ id: row.Project_ID || row.project_id, year: Number(row.Fiscal_Year || ui.year), name: row.Project_Name || row.project_name || '', deptId: row.Dept_ID || row.department_id || departments.find(d => d.name === row.Department)?.id || '', budget: safeNum(row.Budget_Allocated || row.budget || 0), owners: [{ name: row.Responsible_Person || row.owner || '', email: row.Primary_Email || '' }, ...(row.Co_Name_1 || row.co_name_1 ? [{ name: row.Co_Name_1 || row.co_name_1, email: row.Co_Email_1 || row.co_email_1 || '' }] : []), ...(row.Co_Name_2 || row.co_name_2 ? [{ name: row.Co_Name_2 || row.co_name_2, email: row.Co_Email_2 || row.co_email_2 || '' }] : [])], active: String(row.Status || 'active').toLowerCase() !== 'archived', status: row.Status || 'active' }));
       const plans = {};
-      (remote.plans || []).forEach(row => { plans[row.project_id] = { ...row, projectId: row.project_id, baselineStart: row.baseline_start, baselineEnd: row.baseline_end, objective: row.objective || '', indicator: row.indicator || '', target: row.target || '', sdgs: String(row.sdg_ids || '').split(',').map(v => v.trim()).filter(Boolean), procurementItems: [] }; });
+      (remote.plans || []).forEach(row => {
+        let procurementItems = [];
+        try {
+          const parsed = JSON.parse(row.procurement_plan || '[]');
+          if (Array.isArray(parsed)) procurementItems = parsed.filter(item => item && (item.name || safeNum(item.amount) > 0));
+        } catch { procurementItems = []; }
+        // The production API stores the plan header and procurement JSON, while
+        // the browser view expects a monthly schedule as well.  Always provide
+        // a complete, harmless schedule so a partially filled plan cannot crash
+        // report-review or dashboard rendering.
+        const months = yearMonths(Number(row.fiscal_year || ui.year)).map(key => ({ key, draft: 0, approval: 0, execute: 0, disburse: 0, summary: 0, procure: 0 }));
+        plans[row.project_id] = { ...row, projectId: row.project_id, baselineStart: row.baseline_start, baselineEnd: row.baseline_end, objective: row.objective || '', expectedOutcome: row.expected_outcome || '', indicator: row.indicator || '', target: row.target || '', indicatorUnit: row.indicator_unit || '', sdgs: String(row.sdg_ids || '').split(',').map(v => v.trim()).filter(Boolean), procurementItems, months };
+      });
       const reports = (remote.reports || []).map(row => ({ ...row, id: row.report_id, projectId: row.project_id, month: row.month, version: Number(row.version || 1), summaryText: row.summary || '', indicatorActual: row.indicator_actual || '', delay: row.delay || '', sdgOutcome: row.sdg_outcome || '', updatedAt: row.updated_at || row.submitted_at || '' }));
       const budgetRows = remote.budgets || [];
       const budgets = Object.fromEntries(budgetRows.map(row => [Number(row.Fiscal_Year), { amount: safeNum(row.Total_Budget_THB), updatedAt: row.Updated_At || '' }]));
