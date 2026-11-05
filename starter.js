@@ -49,6 +49,11 @@
     return sdgSuggestionRules.map(rule=>({ ...rule, matches:rule.terms.filter(term=>normalized.includes(term.toLocaleLowerCase())) }))
       .filter(item=>item.matches.length).sort((a,b)=>b.matches.length-a.matches.length).slice(0,3);
   }
+  function renderLocalSdgSuggestions(panel, fields) {
+    const text = Object.values(fields || {}).join(' ');
+    const recommendations = suggestSdgsFromText(text).map(item => ({ id: item.id, reason: item.reason, evidence: item.matches.join(', '), confidence: Math.min(95, 55 + item.matches.length * 15) }));
+    panel.innerHTML = recommendations.length ? `<div class="sdg-ai-results-heading"><strong>ข้อเสนอ SDG จากข้อมูลโครงการ</strong><small>ระบบวิเคราะห์ภายใน · ตรวจสอบก่อนเลือก</small></div><div class="sdg-ai-cards">${recommendations.map(item => { const option = sdgOptions.find(([id]) => id === item.id); return `<article class="sdg-ai-card"><div><span class="sdg-ai-id">${esc(item.id)}</span><strong>${esc(option?.[1] || '')}</strong><p>${esc(item.reason)}</p><small>เชื่อมโยงจาก: ${esc(item.evidence)}</small></div><button type="button" class="mini-btn" data-sdg-select-recommendation="${esc(item.id)}">เลือก SDG นี้</button></article>`; }).join('')}</div>` : '<div class="sdg-ai-empty">ยังไม่พบ SDG ที่เชื่อมโยงชัดเจน · กรุณาเลือก SDG ด้วยตนเอง</div>';
+  }
   const defaultWeights = { draft: 5, approval: 5, execute: 75, disburse: 5, summary: 10 };
   const empty = () => ({ budgets: {}, departments: [], projects: [], plans: {}, planDrafts: {}, reports: [], reportDrafts: [], documents: [], weights: {}, history: [], trash: [], admins: [{ email: INITIAL_ADMIN_EMAIL, role: 'ผู้ดูแลหลัก', addedAt: 'ผู้ดูแลหลักเริ่มต้น', addedBy: 'ระบบ', isPrimary: true }], yearStatus: {} });
   const $ = selector => document.querySelector(selector);
@@ -524,6 +529,7 @@
       pageMarkup = `${heading('เกิดข้อผิดพลาด', 'เปิดหน้านี้ไม่สำเร็จ', 'ลองเปิดอีกครั้ง หรือกลับไปหน้าแรก')}${emptyBox('ไม่สามารถแสดงเนื้อหาหน้านี้ได้', 'ระบบบันทึกข้อผิดพลาดไว้ในคอนโซลสำหรับตรวจสอบ', 'home', 'กลับหน้าแรก')}`;
     } finally { db = storedDb; }
     screen.innerHTML = pageMarkup;
+    if (ui.page === 'plan') screen.querySelectorAll('#plan-schedule input[data-stage]:not([data-money])').forEach(input => { if (input.value === '0') input.value = ''; });
     if (['dashboard','project-output','report-example','review'].includes(ui.page)) normalizeDashboardReportKpis();
     // The sample report must always include the SDG section once its report sheet exists.
     // The helper is safe on the input/wizard view because it exits when no sheet is present.
@@ -1451,6 +1457,11 @@
     if (go) return navigate(go.dataset.go);
     const node = event.target.closest('button');
     if (!node || !screen.contains(node)) return;
+    if (node.matches('button[type="submit"], [data-save-plan-draft]')) {
+      if (node.dataset.busy === '1') { event.preventDefault(); return; }
+      node.dataset.busy = '1'; node.disabled = true; node.dataset.originalText = node.textContent; node.textContent = 'กำลังบันทึก…';
+      setTimeout(() => { node.disabled = false; node.dataset.busy = '0'; node.textContent = node.dataset.originalText || 'บันทึก'; }, 12000);
+    }
     if (node.hasAttribute('data-report-step')) { setReportStep(node.dataset.reportStep); return; }
     if (node.hasAttribute('data-report-prev')) { setReportStep(ui.reportStep - 1); return; }
     if (node.hasAttribute('data-report-next')) { setReportStep(ui.reportStep + 1); return; }
@@ -1479,7 +1490,7 @@
         if(!response.ok)throw new Error(payload.error||'เรียก Gemini ไม่สำเร็จ');
         const recommendations=payload.recommendations||[];
         panel.innerHTML=recommendations.length?`<div class="sdg-ai-results-heading"><strong>ข้อเสนอจาก Gemini ${recommendations.length} ข้อ</strong><small>เป็นคำแนะนำ · ตรวจเหตุผลก่อนนำไปเลือก</small></div><div class="sdg-ai-cards">${recommendations.map(item=>{const option=sdgOptions.find(([id])=>id===item.id);return `<article class="sdg-ai-card"><div><span class="sdg-ai-id">${esc(item.id)}</span><strong>${esc(option?.[1]||'')}</strong><p>${esc(item.reason)}</p><small>เชื่อมโยงจาก: ${esc(item.evidence)} · ความเชื่อมั่นโดยประมาณ ${Number(item.confidence)}%</small></div></article>`}).join('')}</div>`:'<div class="sdg-ai-empty">ยังไม่พบ SDG ที่เชื่อมโยงชัดเจน · ลองปรับข้อความหรือเลือก SDG เอง</div>';
-      } catch(error) { panel.innerHTML=`<div class="sdg-ai-empty">${esc(error.message||'เกิดข้อผิดพลาด')} · ข้อมูลจากระบบไม่ถูกบันทึก</div>`; }
+      } catch(error) { renderLocalSdgSuggestions(panel, values); }
       finally { node.disabled=false; }
       return;
     }
@@ -1498,9 +1509,8 @@
         const recommendations=payload.recommendations||[];
         if(!recommendations.length){panel.innerHTML='<div class="sdg-ai-empty">ยังไม่พบ SDG ที่เชื่อมโยงอย่างชัดเจนจากข้อมูลที่ให้มา · ลองเพิ่มรายละเอียดหรือเลือก SDG ด้วยตนเอง</div>';return;}
         panel.innerHTML=`<div class="sdg-ai-results-heading"><strong>ข้อเสนอจาก Gemini ${recommendations.length} ข้อ</strong><small>ผลเป็นคำแนะนำ · ตรวจเหตุผลและเลือกด้วยตนเอง</small></div><div class="sdg-ai-cards">${recommendations.map(item=>{const option=sdgOptions.find(([id])=>id===item.id),checked=$$('#plan-form input[name="sdgs"]:checked').some(input=>input.value===item.id);return `<article class="sdg-ai-card"><div><span class="sdg-ai-id">${esc(item.id)}</span><strong>${esc(option?.[1]||'')}</strong><p>${esc(item.reason)}</p><small>เชื่อมโยงจากข้อมูล: ${esc(item.evidence)} · ความเชื่อมั่นโดยประมาณ ${Number(item.confidence)}%</small></div><button type="button" class="mini-btn" data-sdg-select-recommendation="${esc(item.id)}" ${checked?'disabled':''}>${checked?'เลือกแล้ว':'เลือก SDG นี้'}</button></article>`}).join('')}</div>`;
-      } catch(error) {
-        panel.innerHTML=`<div class="sdg-ai-empty">${esc(error.message||'เกิดข้อผิดพลาด')} · ข้อมูลไม่ได้ถูกบันทึกในระบบ</div>`;
-      } finally { node.disabled=false; }
+      } catch(error) { renderLocalSdgSuggestions(panel, fields); }
+      finally { node.disabled=false; }
       return;
     }
     if (node.dataset.sdgSelectRecommendation) {
@@ -1540,6 +1550,7 @@
       if(blockIfYearClosed())return;
       const draft=collectPlan(),error=validatePlan(draft,false);
       if(error)return notice(error);
+      await appsScript('savePlan', { project_id: selectedProject()?.remoteId || ui.projectId, baseline_start: draft.baselineStart, baseline_end: draft.baselineEnd, objective: draft.objective, indicator: draft.indicator, target: draft.target, sdg_ids: draft.sdgs || [], procurement_plan: draft.procurementItems || [] });
       draft.savedAt=now();draft.status='draft';db.planDrafts[ui.projectId]=draft;persist();render();return notice('บันทึกร่างแผนเรียบร้อยแล้ว · กลับมาทำต่อได้ทุกเมื่อ', 'confirmation');
     }
     if (node.hasAttribute('data-save-report-draft')) {
