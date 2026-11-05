@@ -1886,6 +1886,11 @@
       const reports = (remote.reports || []).map(row => ({ ...row, id: row.report_id, projectId: row.project_id, month: row.month, version: Number(row.version || 1), summaryText: row.summary || '', indicatorActual: row.indicator_actual || '', delay: row.delay || '', sdgOutcome: row.sdg_outcome || '', updatedAt: row.updated_at || row.submitted_at || '' }));
       const budgetRows = remote.budgets || [];
       const budgets = Object.fromEntries(budgetRows.map(row => [Number(row.Fiscal_Year), { amount: safeNum(row.Total_Budget_THB), updatedAt: row.Updated_At || '' }]));
+      const availableYears = [...new Set(projects.map(project => Number(project.year)).filter(Number.isFinite))];
+      if (!projects.some(project => Number(project.year) === Number(ui.year)) && availableYears.length) {
+        ui.year = Math.max(...availableYears);
+        ui.month = defaultMonthForYear(ui.year);
+      }
       db = { ...db, departments, projects, plans, reports, budgets };
       persist();
       const connection = document.getElementById('connection-status');
