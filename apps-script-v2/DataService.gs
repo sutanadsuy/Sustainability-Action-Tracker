@@ -7,7 +7,7 @@ function rows_(name) {
 }
 function bootstrap_(fiscalYear) {
   const year = Number(fiscalYear || new Date().getFullYear() + 543);
-  return {fiscalYear:year, budgets:rows_('Master_Budgets').filter(r=>Number(r.Fiscal_Year)===year), departments:rows_('Master_Departments'), projects:rows_('Master_Projects').filter(r=>Number(r.Fiscal_Year)===year), plans:rows_('Plans'), reports:rows_('Reports'), expenses:rows_('Expenses'), attachments:rows_('Attachments')};
+  return {fiscalYear:year, budgets:rows_('Master_Budgets'), departments:rows_('Master_Departments'), projects:rows_('Master_Projects'), plans:rows_('Plans'), reports:rows_('Reports'), expenses:rows_('Expenses'), attachments:rows_('Attachments')};
 }
 function saveBudget_(p) { append_('Master_Budgets',{Fiscal_Year:p.fiscal_year,Total_Budget_THB:p.total_budget_thb,Updated_At:new Date(),Status:'active'}); return {fiscal_year:p.fiscal_year}; }
 function saveDepartment_(p) { const id=p.department_id||Utilities.getUuid(); append_('Master_Departments',{Dept_ID:id,Department_Name:p.department_name,Head_Name:p.head_name,Head_Email:p.head_email,Start_Date:p.start_date||''}); return {department_id:id}; }
@@ -19,7 +19,7 @@ function append_(sheetName, object) {
 }
 function createProject_(p) {
   const id = p.project_id || Utilities.getUuid();
-  append_('Master_Projects',{Project_ID:id,Fiscal_Year:p.fiscal_year,Project_Name:p.project_name,Department:p.department,Budget_Allocated:p.budget_allocated,Responsible_Person:p.responsible_person,Primary_Email:p.primary_email,Start_Date:p.start_date,End_Date:p.end_date,Status:'active'});
+  append_('Master_Projects',{Project_ID:id,Fiscal_Year:p.fiscal_year,Project_Name:p.project_name,Department:p.department,Budget_Allocated:p.budget_allocated,Responsible_Person:p.responsible_person,Primary_Email:p.primary_email,Co_Name_1:p.co_name_1||'',Co_Email_1:p.co_email_1||'',Co_Name_2:p.co_name_2||'',Co_Email_2:p.co_email_2||'',Start_Date:p.start_date,End_Date:p.end_date,Status:'active'});
   return {project_id:id};
 }
 function savePlan_(p) { const id=p.plan_id||Utilities.getUuid(); append_('Plans',{plan_id:id,project_id:p.project_id,baseline_start:p.baseline_start,baseline_end:p.baseline_end,objective:p.objective,indicator:p.indicator,target:p.target,sdg_ids:(p.sdg_ids||[]).join(','),procurement_plan:JSON.stringify(p.procurement_plan||[]),updated_at:new Date()}); return {plan_id:id}; }
